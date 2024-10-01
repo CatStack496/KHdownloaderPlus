@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download App</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        textarea, input[type="text"] { width: 100%; margin-bottom: 10px; }
+        button { padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>KHdownloader App</h1>
+    <form id="downloadForm">
+        <textarea id="bigTextBox" rows="10" placeholder="Enter data, separated by newlines"></textarea>
+        <input type="text" id="smallTextBox" placeholder="Enter file format">
+        <button type="submit">Start Download</button>
+    </form>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('downloadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const bigText = document.getElementById('bigTextBox').value;
+            const fileFormat = document.getElementById('smallTextBox').value;
+
+            fetch('/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'big_text': bigText,
+                    'file_format': fileFormat
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').innerHTML = 
+                    `<p>Data Array: ${JSON.stringify(data.data_array)}</p>
+                     <p>File Format: ${data.file_format}</p>`;
+            });
+        });
+    </script>
+</body>
+</html>
