@@ -20,7 +20,6 @@ async def download_file(session, url, save_dir):
                 content_disposition = response.headers['Content-Disposition']
                 if 'filename=' in content_disposition:
                     filename = content_disposition.split('filename=')[1].strip('"')
-            #print(sanitize_filename(filename), filename)
             save_path = os.path.join(save_dir, await sanitize_filename(filename))
 
             async with aiofiles.open(save_path, 'wb') as file:
@@ -49,51 +48,49 @@ async def process_song_link(session, song_link, file_extension, download_folder)
                         await download_file(session, anchor['href'], download_folder)
 
 async def main():
-    webpage_url = input("Input KHinsider URL: ")
+    webpage_urls = input("Input KHinsider URLs (separate by semicolon): ").split(';')
     file_extension = input("What file extension do you want to download?: ")
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(webpage_url) as response:
-            content = await response.text()
-            soup = BeautifulSoup(content, 'html.parser')
+        for webpage_url in webpage_urls:
+            webpage_url = webpage_url.strip()  # Trim whitespace
+            if not webpage_url:
+                continue  # Skip empty inputs
 
-        # Extract folder name from the first h2 in the pageContent div
-        page_content_div = soup.find('div', {'id': 'pageContent'})
-        if page_content_div:
-            first_h2 = page_content_div.find('h2')
-            if first_h2:
-                folder_name = first_h2.text.strip()
+            async with session.get(webpage_url) as response:
+                content = await response.text()
+                soup = BeautifulSoup(content, 'html.parser')
+
+            # Extract folder name from the first h2 in the pageContent div
+            page_content_div = soup.find('div', {'id': 'pageContent'})
+            if page_content_div:
+                first_h2 = page_content_div.find('h2')
+                if first_h2:
+                    folder_name = await sanitize_filename(first_h2.text.strip())
+                else:
+                    folder_name = "Unknown Album"
             else:
                 folder_name = "Unknown Album"
-        else:
-            folder_name = "Unknown Album"
 
-        # Create the download folder path
-        download_folder = os.path.join("downloads", folder_name)
+            # Create the download folder path
+            download_folder = os.path.join("downloads", folder_name)
 
-        song_links = []
-        table = soup.find('table', {'id': 'songlist'})
-        if table:
-            for td in table.find_all('td', {'class': 'playlistDownloadSong'}):
-                link = td.find('a')
-                if link:
-                    song_links.append("https://downloads.khinsider.com" + link['href'])
+            song_links = []
+            table = soup.find('table', {'id': 'songlist'})
+            if table:
+                for td in table.find_all('td', {'class': 'playlistDownloadSong'}):
+                    link = td.find('a')
+                    if link:
+                        song_links.append("https://downloads.khinsider.com" + link['href'])
 
-        tasks = [process_song_link(session, song_link, file_extension, download_folder) for song_link in song_links]
-        await asyncio.gather(*tasks)
+            tasks = [process_song_link(session, song_link, file_extension, download_folder) for song_link in song_links]
+            await asyncio.gather(*tasks)
         
 async def sanitize_filename(filename: str) -> str:
-    # Define a regex pattern to match invalid characters
-    # Here we allow alphanumeric characters, underscores, hyphens, and periods
-    # You can modify this regex to include or exclude more characters as needed
     valid_filename = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
-    
-    # Optionally, you can also limit the length of the filename
-    # For example, you might want to keep it under 255 characters
     max_length = 255
     if len(valid_filename) > max_length:
         valid_filename = valid_filename[:max_length]
-    
     return valid_filename
 
 if __name__ == "__main__":
