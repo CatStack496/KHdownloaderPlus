@@ -6,38 +6,35 @@ import os
 from urllib.parse import unquote
 import re
 
+# Create a semaphore with a limit of 100
+semaphore = asyncio.Semaphore(20)
+
 async def download_file(session, url, save_dir):
-    try:
-        os.makedirs(save_dir, exist_ok=True)
-
-        async with session.get(url) as response:
-            response.raise_for_status()
-
-            decoded_url = unquote(url)
-            filename = os.path.basename(decoded_url)
-
-            if 'Content-Disposition' in response.headers:
-                content_disposition = response.headers['Content-Disposition']
-                if 'filename=' in content_disposition:
-                    filename = content_disposition.split('filename=')[1].strip('"')
-            save_path = os.path.join(save_dir, await sanitize_filename(filename))
-
-            async with aiofiles.open(save_path, 'wb') as file:
-                await file.write(await response.read())
-
-        print(f"File downloaded and saved as: {save_path}")
-
-    except aiohttp.ClientError as e:
-        print(f"Error downloading file: {e}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    async with semaphore:  # Use the semaphore to limit concurrent downloads
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            async with session.get(url) as response:
+                response.raise_for_status()
+                decoded_url = unquote(url)
+                filename = os.path.basename(decoded_url)
+                if 'Content-Disposition' in response.headers:
+                    content_disposition = response.headers['Content-Disposition']
+                    if 'filename=' in content_disposition:
+                        filename = content_disposition.split('filename=')[1].strip('"')
+                save_path = os.path.join(save_dir, await sanitize_filename(filename))
+                async with aiofiles.open(save_path, 'wb') as file:
+                    await file.write(await response.read())
+            print(f"File downloaded and saved as: {save_path}")
+        except aiohttp.ClientError as e:
+            print(f"Error downloading file: {e}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
 async def process_song_link(session, song_link, file_extension, download_folder):
     async with session.get(song_link) as song_page_response:
         song_page_content = await song_page_response.text()
         song_page_soup = BeautifulSoup(song_page_content, 'html.parser')
         paragraphs = song_page_soup.find_all('p')
-
         for paragraph in paragraphs:
             span = paragraph.find('span', class_='songDownloadLink')
             if span:
@@ -50,17 +47,14 @@ async def process_song_link(session, song_link, file_extension, download_folder)
 async def main():
     webpage_urls = input("Input KHinsider URLs (separate by semicolon): ").split(';')
     file_extension = input("What file extension do you want to download?: ")
-
     async with aiohttp.ClientSession() as session:
         for webpage_url in webpage_urls:
             webpage_url = webpage_url.strip()  # Trim whitespace
             if not webpage_url:
                 continue  # Skip empty inputs
-
             async with session.get(webpage_url) as response:
                 content = await response.text()
                 soup = BeautifulSoup(content, 'html.parser')
-
             # Extract folder name from the first h2 in the pageContent div
             page_content_div = soup.find('div', {'id': 'pageContent'})
             if page_content_div:
@@ -71,10 +65,8 @@ async def main():
                     folder_name = "Unknown Album"
             else:
                 folder_name = "Unknown Album"
-
             # Create the download folder path
             download_folder = os.path.join("downloads", folder_name)
-
             song_links = []
             table = soup.find('table', {'id': 'songlist'})
             if table:
@@ -82,7 +74,6 @@ async def main():
                     link = td.find('a')
                     if link:
                         song_links.append("https://downloads.khinsider.com" + link['href'])
-
             tasks = [process_song_link(session, song_link, file_extension, download_folder) for song_link in song_links]
             await asyncio.gather(*tasks)
         
